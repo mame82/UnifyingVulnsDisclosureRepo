@@ -12,6 +12,9 @@ everything**.
 As Logitech already agreed that I'm allowed to disclose most parts, I'll
 add in material as soon as I cleaned it up. This includes:
 
+**For questions / discussion please utilize github issues, for direct communication
+use my email address**
+
 ## (planned) Repo content
 
 - mjackit (Go code to interact with Logitech Unifying dongles/devices from RF end and carry out PoC1, PoC2 and
