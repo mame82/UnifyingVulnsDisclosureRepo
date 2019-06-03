@@ -1,0 +1,28 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 14
+VisualStudioVersion = 14.0.25420.1
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LogitackerClient", "LogitackerTest\LogitackerClient.csproj", "{803FF632-E3FA-4EEF-A514-EC77C600F898}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LoaderApp", "LoaderApp\LoaderApp.csproj", "{7166B4AB-4410-4AED-90B2-40B717222700}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{803FF632-E3FA-4EEF-A514-EC77C600F898}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{803FF632-E3FA-4EEF-A514-EC77C600F898}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{803FF632-E3FA-4EEF-A514-EC77C600F898}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{803FF632-E3FA-4EEF-A514-EC77C600F898}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7166B4AB-4410-4AED-90B2-40B717222700}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7166B4AB-4410-4AED-90B2-40B717222700}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7166B4AB-4410-4AED-90B2-40B717222700}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7166B4AB-4410-4AED-90B2-40B717222700}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

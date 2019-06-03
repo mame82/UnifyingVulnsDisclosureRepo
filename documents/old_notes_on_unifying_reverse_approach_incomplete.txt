@@ -1,0 +1,765 @@
+SUMMARY OF AES crypto reversing
+================================
+- dongle c-u0007 with vulnerable firmware version 12.01.0019 has been used
+- nice: amongst other issues, this firmware allows to send encrypted frames, with a counter
+which was already used and decrypts them to HID reports anyways (already discovered by Marc Newlin)
+- first the firmware flash utilities created by Marc Newlin have been rewritten to allow firmware dumps
+(0x20 is "write flash", 0x10 is "read flash"), the dumper is `logitech-usb-dump.py`
+- the firmware is between 0x0000 and 0x67ff, the boot loader starts at 0x7400
+- while Marc's flashing tools only write up to 0x67ff (last two byte are CRC), the dumper has been
+crafted to dump everything up to 0x7fff
+- this includes dongle specific data (serial etc) and data of paired devices (see memory mapping)
+- the goal was to analyze crypto functionality of link encrypted keyboards (painring process is already
+under full control, as both, RF device pairing and emulation of a dongle in RF pairing mode have been
+reversed and rebuilt). Additionally custom code has been developed to interface with the dongle from
+USB end (setting to pairing mode, analyze incomin DJ/HID++ reports, send DJ/HID++ reports). During analysis
+of pairing process, it has become clear that not much data for key generation is exchanged (only 4 bytes
+which aren't arbitrary device metadata) and that a single bit (set by device during pairing) tells
+the dongle to use link encryption.
+- The link encryption was assumed to use AES128 in CTR mode, as the NRF24LU1+ used by the C-U0007 provides
+hardware support and successive RF frames of same payload are encrypted differently. Another strong indicator
+for CTR mode, was that every RF frame contains a plain 32bit value which is incremented by one for each frame
+(no CBC mode).
+- With static analysis, the crypto function is easy to spot, as it is the only code which uses the SFR involved
+in interfacing with AES hardware support (AESCS, AESKIN, AESD ...).
+- Analysis has taken two days, as I'm a more or less a first timer on 8051 arch (not used to 16 bit addressing 
+on 8bit arch) and ESIL emulation of radare2 (I badly need an IDA License) isn't to usefull (no memory mapped IO,
+no SFR interface etc.). Anyways, a rough idea of the AES functionality was there after initial analysis:
+	- AES is used in ECB, not CTR
+	- to create different ciphers for same frame, the key has to be changed based on the counter (unlikely)
+	or the plaintext has to be changed based on the counter (more likely)
+	- the cipher text created from the unknown key and unknown plaintext is then xored:
+		a) to the unencrypted RF frame to encrypt it
+		b) to the encrypted RF frame to decrypt it
+- below is the fully reversed function for RF frame decryption in pseudo code
+- the version of the function isn't patched against counter reuse, this fact has been exploited to replay
+the same RF frame multiple time
+- this again has been utilized as trigger for this function with NEVER CHANGING INPUT PARAMETERS, the function
+has then be patched in different ways, to leak data from the hardcoded pointer to the resulting plain USB report
+(namely AES key, AES in data and values of r1,r2,r3 on call)
+
+Note:
+The pseudo code could have been written simpler (e.g. inner loops), but the pseudo accounts for hardcoded pointers
+and non-looped instructions in the real disassembly (and thus highlights good places for hooks, hehe)
+
+ToDo:
+Check how key material and key addresses change for different devices or repaired devices. 
+Check which parameters used during pairing influence the key material.
+If necessary, find and reverse key generation functionality --> if enough key relevant data could
+be sniffed passivly (without sniffing pairing itself), this could maybe be used for key bruteforcing.
+
+Note2: I don't provide keydata or full firmware dumps!!
+
+
+The reversed crypto function in pseudo code (note encryption is the same as decryption):
+-----------------------------------------------------------------------------------------
+
+
+// function offset for fw 12.01.0019 is 0x516d
+AES_XOR(deviceKeyAddrLow r1, deviceKeyAddrHigh r2, keyMemoryType r3) {
+	//memoryType == 1 --> XDATA 16 bit addr
+	//memoryType < 1 --> IRAM 8 bit addr
+	//memoryType > 1 && memoryType != 0xfe --> XDATA 8 bit address
+	//other values --> no memory read
+	//
+	// for analyzed function calls of replayed RF frames (counter reuse vulnerability, baby ;-))
+	//	r1 = 0xe0, r2 = 0xe0, r3 = 0x01 --> key is at 0x81e0 in XDATA
+	// it is likely, that r2 and r3 change per paired device (not investigate yet)
+
+ 	ptr_82c0 = (byte *) 0x82c0
+	// subfunction to store r3,r2,r1 in XRAM
+	ptr_82c0[0] = r3
+	ptr_82c0[1] = r2
+	ptr_82c0[2] = r1
+
+	ptr_RF_frame_counter = (byte *) 0x81b6 //points to the 4 byte counter of the incoming RF frame
+	ptr_aes_indata_counter_pos = (byte *) 0x8318 //points to byte 7 of the plain input data used during AES encryption 
+	// update AES input data
+	ptr_aes_indata_counter_pos[0] = ptr_RF_frame_counter[0]
+	ptr_aes_indata_counter_pos[1] = ptr_RF_frame_counter[1]
+	ptr_aes_indata_counter_pos[2] = ptr_RF_frame_counter[2]
+	ptr_aes_indata_counter_pos[3] = ptr_RF_frame_counter[3]
+
+	reg_AESCS = 0x10         //set encryption mode to AES ECB
+	reg_AESIA1 = 0x00        //set internal pointer for block AESKIN to 0 and block AESIV to 0
+	reg_AESIA2 = 0x00        //set internal pointer for block AESD to 0 
+
+	for (r7 = 15; r7 >= 0; r7--) {
+		subfunction_restore_r3_r2_r2(ptr_82c0) 	// set back r3,r2,r1 to values handed in to AES_XOR
+
+		ushort read_offset = (ushort) r7
+
+		// the next function reads a byte from memoryType and offset depending on calling parameters of outer function
+		// in our case, this leads to a read at XDATA(0x81e0 + r7)
+		keyin_byte = subfunction_read_byte(addrLow = r1_deviceKeyAddrLow , addrHigh = r2_deviceKeyAddrHigh, mtype = r3_keyMemoryType, offset = read_offset)
+
+		AESKIN = keyin_byte //AESKIN is a stream register, internal pointer increments, bytes are written like a33,a23,a13,a03,a32 ... a00 (backwards)
+		
+		ptr_aes_indata_byte = (byte*) (0x8311 + r7) //So AES input starts at 0x8311 (hardcoded) !!rember 0x8318..0x831b have been overwritten with RF frame's counter value!!
+
+		AESD = *ptr_aes_indata_byte
+	}
+
+	AESCS |= 0x01 //start AES crypto operation
+
+	while (AESCS & 0x01 == 0x01) {} //busy loop till crypto operation finished; indicated by bit0 toggling back to 0
+
+	//sub routine to send cipher15..12 to nirvana
+	waste = AESD
+	waste = AESD
+	waste = AESD
+	waste = AESD
+
+	//sub routine to send cipher11..8 to nirvana
+	waste = AESD
+	waste = AESD
+	waste = AESD
+	waste = AESD
+	
+	ptr_RF_frame_pay_encrypted_7 = (byte *) 0x81b5 //points to last encrypted RF frame byte, right before first counter byte at 0x81b6 (used in beginning)
+	*ptr_RF_frame_pay_encrypted_7 ^= AESD //xor last encrypted byte of RF payload with cipher byte 7 (AESD, again, hands out bytes in reversed order)
+
+	ptr_RF_frame_pay_encrypted_6 = (byte *) 0x81b4 
+	*ptr_RF_frame_pay_encrypted_6 ^= AESD 
+
+	ptr_RF_frame_pay_encrypted_5 = (byte *) 0x81b3
+	*ptr_RF_frame_pay_encrypted_5 ^= AESD 
+
+	ptr_RF_frame_pay_encrypted_4 = (byte *) 0x81b2
+	*ptr_RF_frame_pay_encrypted_4 ^= AESD 
+
+	ptr_RF_frame_pay_encrypted_3 = (byte *) 0x81b1
+	*ptr_RF_frame_pay_encrypted_3 ^= AESD 
+
+	ptr_RF_frame_pay_encrypted_2 = (byte *) 0x81b0
+	*ptr_RF_frame_pay_encrypted_2 ^= AESD 
+
+	ptr_RF_frame_pay_encrypted_1 = (byte *) 0x81af
+	*ptr_RF_frame_pay_encrypted_1 ^= AESD 
+
+	ptr_RF_frame_pay_encrypted_0 = (byte *) 0x81ae
+	*ptr_RF_frame_pay_encrypted_0 ^= AESD
+
+	return
+}
+
+
+
+THE REST ARE NOTES WIHCH HAVE BEEN MADE DURING ANALYSIS/REVERSING ....
+=========================================================================
+
+
+
+RADARE commands
+http://radare.today/posts/emulating-simple-bootloader/
+==============
+s 0x516d
+
+af
+
+e asm.bits=8
+e asm.arch=8051
+e asm.emu=true
+e asm.emu.write=true
+e io.cache=true
+
+aei
+aeim
+aeip
+aer
+
+s 0x00
+
+[0x0000516d]> s 0xe24
+[0x00000e24]> af
+aecu 0x516d
+
+
+
+# af	analyze address as function
+
+# e asm.emu.write=true	allow emu to write
+# io.cache=true		enable IO cache
+
+# aei 	init ezil
+# aeim 	init ezil VM stack 
+# aeim 0x8000 0x800 same, but (0x800 bytes from offset 0x8000)
+# aeip 	init PC to current addr
+# aer display current reg vals
+
+
+memory layout flash
+======================
+
+Flash:
+0x0000 to 0x67ff	Dongle firmware (last 16 bit = CRC)
+
+0x6c10 ...		Dongle + device data (fw version, wpid, serial etc.)
+
+0x7010 ...		Mirror Dongle + device data (fw version, wpid, serial etc.)
+
+0x7400 to 0x7fff	Bootloader firmware
+
+Rest of memory:
+0x8000 to 0x87ff	XDATA (RAM)
+0xC000 to 0xC7ff	USB mapped RAM
+
+	C680-C6BF	in1buf
+	C6C0-C6FF	out0buf
+	C700-C73F	in0buf
+	...
+	C7A9		in_IRQ
+	C7AA		out_IRQ
+	C7AB		USB irq
+	
+
+
+USB in/out
+--------------
+
+RAM 0x81b0 	src output reports ??
+RAM 0x81ae 	trgt input reports ??
+
+0x2cc8 USB functionality ??
+
+
+     ::::   ;-- hit0_41:      <<<<<<<< short hid (see xrl length)
+    ,=====< 0x000047d1      b4100d         cjne a, #0x10, 0x47e1       ;[1]   ; compare and jump if not equal                                                                                                      
+    |::::   0x000047d4      e540           mov a, 0x40                 ; [0x10000040:1]=0 ; move                                                                                                                   
+    |::::   0x000047d6      6407           xrl a, #0x07                ; logical exclusive-or                                                                                                                      
+    |::::   0x000047d8      453f           orl a, 0x3f                 ; [0x1000003f:1]=0 ; logical or                                                                                                             
+   ,======< 0x000047da      7005           jnz 0x47e1                  ;[1]   ; jump if accumulator not zero                                                                                                       
+   ||::::   0x000047dc      754703         mov 0x47, #0x03             ; [0x10000047:1]=0 ; move                                                                                                                   
+  ,=======< 0x000047df      8022           sjmp 0x4803                 ;[2]   ; short jump (relative addr)                                                                                                         
+  |``-----> 0x000047e1      e53c           mov a, 0x3c                 ; [0x1000003c:1]=0 ; move                                                                                                                   
+  | ,=====< 0x000047e3      b4110d         cjne a, #0x11, 0x47f3       ;[3]   ; compare and jump if not equal                                                                                                      
+  | |::::   0x000047e6      e540           mov a, 0x40                 ; [0x10000040:1]=0 ; move                                                                                                                   
+  | |::::   0x000047e8      6414           xrl a, #0x14                ; logical exclusive-or                                                                                                                      
+  | |::::   0x000047ea      453f           orl a, 0x3f                 ; [0x1000003f:1]=0 ; logical or                                                                                                             
+  |,======< 0x000047ec      7005           jnz 0x47f3                  ;[3]   ; jump if accumulator not zero                                                                                                       
+  |||::::   0x000047ee      754704         mov 0x47, #0x04             ; [0x10000047:1]=0 ; move                                                                                                                   
+  ========< 0x000047f1      8010           sjmp 0x4803                 ;[2]   ; short jump (relative addr)                                                                                                         
+  |``-----> 0x000047f3      e53c           mov a, 0x3c                 ; [0x1000003c:1]=0 ; move                                                                                                                   
+  |  ::::   ;-- hit0_17:      <<<<<<<< short DJ (see xrl length)
+  | ,=====< 0x000047f5      b42011         cjne a, #0x20, 0x4809       ;[4]   ; compare and jump if not equal                                                                                                      
+  | |::::   0x000047f8      e540           mov a, 0x40                 ; [0x10000040:1]=0 ; move                                                                                                                   
+  | |::::   0x000047fa      640f           xrl a, #0x0f                ; logical exclusive-or                                                                                                                      
+  | |::::   0x000047fc      453f           orl a, 0x3f                 ; [0x1000003f:1]=0 ; logical or        
+
+
+
+0x31a USB descriptor for if 2 
+
+0x000006ca --> xref to "Enter ICP"
+
+
+
+00006bf0: ffff ffff ffff ffff ffff ffff ffff 77eb  ..............w.
+00006c00: 3fff ffff ffff ffff ffff ffff ffff ffff  ?...............
+00006c10: 0212 0100 1988 0204 0000 0000 0000 0000  ................
+00006c20: 0377 829a 0702 0613 0000 0000 0000 0000  .w..............
+00006c30: 7c11 1130 e220 012c 1100 0000 0000 0000  |..0. .,........
+00006c40: ffff ffff ffff ffff ffff ffff ffff ffff  ................
+
+
+--> 0xe24  .. 0xe9c  calls 0x3095
+--> 0x3095 .. 0x314b calls 0x32f5
+--> 0x32f5 .. 0x3300 calls 0x516d (a+b; r2 = a; r3 = #0x01)
+-->	0x516d !! encryption method AES !!!
+
+
+radare
+-----------
+
+refs to special data memory region
+
+[0x00000000]> /c 0x6c
+0x000006d8   # 3: mov dptr, #0x6c00
+0x000006ea   # 3: mov dptr, #0x6c00
+0x000006fa   # 3: mov dptr, #0x6c00
+0x0000070c   # 3: mov dptr, #0x6c00
+0x000007d1   # 2: mov r4, #0x6c
+0x00000806   # 2: subb a, #0x6c
+0x0000150a   # 3: mov dptr, #0x6c00
+0x0000152c   # 2: mov r4, #0x6c
+0x0000155b   # 3: mov dptr, #0x6c00
+0x0000157d   # 2: mov 0x6c, a
+0x00001582   # 3: mov dptr, #0x6c00
+0x0000163d   # 3: mov 0x6c, #0x6c
+0x00001643   # 2: mov r6, 0x6c
+0x00001650   # 3: mov dptr, #0x6c00
+0x000016be   # 3: mov dptr, #0x6c00
+0x000018b0   # 2: subb a, #0x6c
+0x00003c0b   # 3: mov dptr, #0x6c00
+0x00003c2b   # 2: mov r4, #0x6c
+0x00003cac   # 3: mov dptr, #0x6c00
+0x00003cf9   # 2: mov r4, #0x6c
+0x0000504e   # 2: mov r2, #0x6c
+0x00005067   # 2: mov 0x6c, r2
+0x00006c35   # 3: jb 0x20.1, 0x6c64
+
+
+
+AES register refs
+===================
+
+0x00005198   # 2: AES indirect register addr 1
+0x00005199   # 2: AES indirect register addr 1
+0x00005194   # 3: AES command status register
+0x0000519a   # 2: AES indirect register addr 2
+0x000051b4   # 2: AES key in
+0x000051c5   # 2: AES command status register
+0x000051c7   # 3: AES command status register
+... AES data in/out ...
+0x000051c1   # 2: mov 0xf3, a
+0x000051d2   # 2: xrl a, 0xf3
+0x000051d9   # 2: xrl a, 0xf3
+0x000051e0   # 2: xrl a, 0xf3
+0x000051e7   # 2: xrl a, 0xf3
+0x000051ee   # 2: xrl a, 0xf3
+0x000051f5   # 2: xrl a, 0xf3
+0x000051fc   # 2: xrl a, 0xf3
+0x00005203   # 2: xrl a, 0xf3
+0x00005207   # 2: mov r7, 0xf3
+0x00005209   # 2: mov r7, 0xf3
+0x0000520b   # 2: mov r7, 0xf3
+0x0000520d   # 2: mov r7, 0xf3
+...
+
+
+
+AES indirect register addr 1
+[0x00000000]> /c 0xf5
+0x000006c6   # 2: mov 0xf5, a
+0x00003473   # 2: subb a, #0xf5
+0x00005198   # 2: mov 0xf5, a
+0x00005199   # 2: mov 0xf5, a
+0x00007688   # 2: mov 0xf5, a
+
+AES indirect register addr 2
+[0x00000000]> /c 0xf6
+0x0000519a   # 2: mov 0xf6, a
+
+AES command status register
+[0x00000000]> /c 0xe8
+0x00003d41   # 3: mov 0xe8, #0x10
+0x00003d52   # 3: jb 0xe8.0, 0x3d52
+0x000042a4   # 2: add a, #0xe8
+0x00004b7e   # 2: mov a, #0xe8
+0x00005194   # 3: mov 0xe8, #0x10
+0x000051c5   # 2: setb 0xe8.0
+0x000051c7   # 3: jb 0xe8.0, 0x51c7
+0x000052f2   # 2: add a, #0xe8
+0x00007914   # 2: add a, #0xe8
+
+AES key in
+[0x00000000]> /c 0xf1
+0x00004e2b   # 3: mov 0x28, #0xf1
+0x000051b4   # 2: mov 0xf1, a
+
+AES data in/out
+[0x00000000]> /c 0xf3
+0x00001bd1   # 2: mov a, #0xf3
+0x00001d58   # 2: anl a, #0xf3
+0x00002631   # 2: anl a, #0xf3
+0x00002ecb   # 2: mov a, 0xf3
+0x00002ecf   # 2: mov a, 0xf3
+0x00003a7c   # 2: mov a, 0xf3
+0x00003a82   # 2: mov a, 0xf3
+0x00003a86   # 2: mov a, 0xf3
+0x00003a8e   # 2: mov a, 0xf3
+0x00003d46   # 3: mov 0xf3, th0
+0x00003d47   # 2: mov 0xf3, r4
+0x00003d49   # 3: mov 0xf3, tl0
+0x00003d4a   # 2: mov 0xf3, r2
+0x00003d4c   # 3: mov 0xf3, 0xcd
+0x00003d4f   # 3: mov 0xf3, 0xcc
+0x000051c1   # 2: mov 0xf3, a
+0x000051d2   # 2: xrl a, 0xf3
+0x000051d9   # 2: xrl a, 0xf3
+0x000051e0   # 2: xrl a, 0xf3
+0x000051e7   # 2: xrl a, 0xf3
+0x000051ee   # 2: xrl a, 0xf3
+0x000051f5   # 2: xrl a, 0xf3
+0x000051fc   # 2: xrl a, 0xf3
+0x00005203   # 2: xrl a, 0xf3
+0x00005207   # 2: mov r7, 0xf3
+0x00005209   # 2: mov r7, 0xf3
+0x0000520b   # 2: mov r7, 0xf3
+0x0000520d   # 2: mov r7, 0xf3
+
+
+AES relevant code disassembly
+=============================
+=============================
+
+            0x0000516d      9082c0         mov dptr, #0x82c0           ; [0x200082c0:1]=0                                                                                                                          
+            0x00005170      eb             mov a, r3                                                                                                                                                               
+            0x00005171      1217ad         lcall 0x17ad                ;[1]                                                                                                                                        
+            0x00005174      9081b6         mov dptr, #0x81b6           ; [0x200081b6:1]=0                                                                                                                          
+            0x00005177      e0             movx a, @dptr                                                                                                                                                           
+            0x00005178      908318         mov dptr, #0x8318           ; [0x20008318:1]=0                                                                                                                          
+            0x0000517b      f0             movx @dptr, a                                                                                                                                                           
+            0x0000517c      9081b7         mov dptr, #0x81b7           ; [0x200081b7:1]=0                                                                                                                          
+            0x0000517f      e0             movx a, @dptr                                                                                                                                                           
+            0x00005180      908319         mov dptr, #0x8319           ; [0x20008319:1]=0                                                                                                                          
+            0x00005183      f0             movx @dptr, a                                                                                                                                                           
+            0x00005184      9081b8         mov dptr, #0x81b8           ; [0x200081b8:1]=0                                                                                                                          
+            0x00005187      e0             movx a, @dptr                                                                                                                                                           
+            0x00005188      90831a         mov dptr, #0x831a           ; [0x2000831a:1]=0                                                                                                                          
+            0x0000518b      f0             movx @dptr, a                                                                                                                                                           
+            0x0000518c      9081b9         mov dptr, #0x81b9           ; [0x200081b9:1]=0                                                                                                                          
+            0x0000518f      e0             movx a, @dptr                                                                                                                                                           
+            0x00005190      90831b         mov dptr, #0x831b           ; [0x2000831b:1]=0                                                                                                                          
+            0x00005193      f0             movx @dptr, a                                                                                                                                                           
+            0x00005194      75e810         mov 0xe8, #0x10             ; [0x100001e8:1]=0                                                                                                                          
+            0x00005197      e4             clr a                                                                                                                                                                   
+            ;-- hit0_225:                                                                                                                                                                                          
+            0x00005198  ~   f5f5           mov 0xf5, a                 ; [0x100001f5:1]=0                                                                                                                          
+            ;-- hit0_226:                                                                                                                                                                                          
+            0x00005199  ~   f5f5           mov 0xf5, a                 ; [0x100001f5:1]=0                                                                                                                          
+            ;-- hit0_227:                                                                                                                                                                                          
+            0x0000519a      f5f6           mov 0xf6, a                 ; [0x100001f6:1]=0                                                                                                                          
+            0x0000519c      7f10           mov r7, #0x10                                                                                                                                                           
+        .-> 0x0000519e      ef             mov a, r7                                                                                                                                                               
+        :   0x0000519f      d3             setb c                                                                                                                                                                  
+        :   0x000051a0      9400           subb a, #0x00                                                                                                                                                           
+       ,==< 0x000051a2      4021           jc 0x51c5                   ;[2]                                                                                                                                        
+       |:   0x000051a4      1f             dec r7                                                                                                                                                                  
+       |:   0x000051a5      9082c0         mov dptr, #0x82c0           ; [0x200082c0:1]=0                                                                                                                          
+       |:   0x000051a8      121502         lcall 0x1502                ;[3]                                                                                                                                        
+       |:   0x000051ab      f9             mov r1, a                                                                                                                                                               
+       |:   0x000051ac      8f82           mov dpl, r7                 ; [0x10000182:1]=0                                                                                                                          
+       |:   0x000051ae      758300         mov dph, #0x00              ; [0x10000183:1]=0                                                                                                                          
+       |:   0x000051b1      12009e         lcall 0x009e                ;[4]                                                                                                                                        
+       |:   ;-- hit0_228:                                                                                                                                                                                          
+       |:   0x000051b4      f5f1           mov 0xf1, a                 ; [0x100001f1:1]=0                                                                                                                          
+       |:   0x000051b6      7411           mov a, #0x11                                                                                                                                                            
+       |:   0x000051b8      2f             add a, r7                                                                                                                                                               
+       |:   0x000051b9      f582           mov dpl, a                  ; [0x10000182:1]=0                                                                                                                          
+       |:   0x000051bb      e4             clr a                                                                                                                                                                   
+       |:   0x000051bc      3483           addc a, #0x83                                                                                                                                                           
+       |:   0x000051be      f583           mov dph, a                  ; [0x10000183:1]=0                                                                                                                          
+       |:   0x000051c0      e0             movx a, @dptr                                                                                                                                                           
+       |:   ;-- hit0_229:                                                                                                                                                                                          
+       |:   ;-- hit0_15:                                                                                                                                                                                           
+       |:   0x000051c1      f5f3           mov 0xf3, a                 ; [0x100001f3:1]=0                                                                                                                          
+       |`=< 0x000051c3      80d9           sjmp 0x519e                 ;[5]                                                                                                                                        
+       `--> 0x000051c5      d2e8           setb 0xe8.0                 ; [0x100001e8:1]=0                                                                                                                          
+        `-> 0x000051c7      20e8fd         jb 0xe8.0, 0x51c7           ;[6] ; [0x100001e8:1]=0                                                                                                                     
+
+            0x000051ca      5107           acall 0x5207                ;[2]                                                                                                                                        
+            0x000051cc      5107           acall 0x5207                ;[2]                                                                                                                                        
+            0x000051ce      9081b5         mov dptr, #0x81b5           ; [0x200081b5:1]=0                                                                                                                          
+            0x000051d1      e0             movx a, @dptr                                                                                                                                                           
+            ;-- hit0_230:                                                                                                                                                                                          
+            ;-- hit0_16:                                                                                                                                                                                           
+            0x000051d2      65f3           xrl a, 0xf3                 ; [0x100001f3:1]=0                                                                                                                          
+            0x000051d4      f0             movx @dptr, a                                                                                                                                                           
+            0x000051d5      9081b4         mov dptr, #0x81b4           ; [0x200081b4:1]=0                                                                                                                          
+            0x000051d8      e0             movx a, @dptr                                                                                                                                                           
+            ;-- hit0_231:                                                                                                                                                                                          
+            ;-- hit0_17:                                                                                                                                                                                           
+            0x000051d9      65f3           xrl a, 0xf3                 ; [0x100001f3:1]=0                                                                                                                          
+            0x000051db      f0             movx @dptr, a                                                                                                                                                           
+            0x000051dc      9081b3         mov dptr, #0x81b3           ; [0x200081b3:1]=0                                                                                                                          
+            0x000051df      e0             movx a, @dptr                                                                                                                                                           
+            ;-- hit0_232:                                                                                                                                                                                          
+            ;-- hit0_18:                                                                                                                                                                                           
+            0x000051e0      65f3           xrl a, 0xf3                 ; [0x100001f3:1]=0                                                                                                                          
+            0x000051e2      f0             movx @dptr, a                                                                                                                                                           
+            0x000051e3      9081b2         mov dptr, #0x81b2           ; [0x200081b2:1]=0                                                                                                                          
+            0x000051e6      e0             movx a, @dptr                                                                                                                                                           
+            ;-- hit0_233:                                                                                                                                                                                          
+            ;-- hit0_19:                                                                                                                                                                                           
+            0x000051e7      65f3           xrl a, 0xf3                 ; [0x100001f3:1]=0                                                                                                                          
+            0x000051e9      f0             movx @dptr, a                                                                                                                                                           
+            0x000051ea      9081b1         mov dptr, #0x81b1           ; [0x200081b1:1]=0                                                                                                                          
+            0x000051ed      e0             movx a, @dptr                                                                                                                                                           
+            ;-- hit0_234:                                                                                                                                                                                          
+            ;-- hit0_20:                                                                                                                                                                                           
+            0x000051ee      65f3           xrl a, 0xf3                 ; [0x100001f3:1]=0                                                                                                                          
+            0x000051f0      f0             movx @dptr, a                                                                                                                                                           
+            0x000051f1      9081b0         mov dptr, #0x81b0           ; [0x200081b0:1]=0                                                                                                                          
+            0x000051f4      e0             movx a, @dptr                                                                                                                                                           
+            ;-- hit0_235:                                                                                                                                                                                          
+            ;-- hit0_21:                                                                                                                                                                                           
+            0x000051f5      65f3           xrl a, 0xf3                 ; [0x100001f3:1]=0                                                                                                                          
+            0x000051f7      f0             movx @dptr, a                                                                                                                                                           
+            0x000051f8      9081af         mov dptr, #0x81af           ; [0x200081af:1]=0                                                                                                                          
+            0x000051fb      e0             movx a, @dptr                                                                                                                                                           
+            ;-- hit0_236:                                                                                                                                                                                          
+            ;-- hit0_22:                                                                                                                                                                                           
+            0x000051fc      65f3           xrl a, 0xf3                 ; [0x100001f3:1]=0                                                                                                                          
+            0x000051fe      f0             movx @dptr, a                                                                                                                                                           
+            0x000051ff      9081ae         mov dptr, #0x81ae           ; [0x200081ae:1]=0                                                                                                                          
+            0x00005202      e0             movx a, @dptr                                                                                                                                                           
+            ;-- hit0_237:                                                                                                                                                                                          
+            ;-- hit0_23:                                                                                                                                                                                           
+            0x00005203      65f3           xrl a, 0xf3                 ; [0x100001f3:1]=0                                                                                                                          
+            0x00005205      f0             movx @dptr, a                                                                                                                                                           
+            0x00005206      22             ret                                                                                                                                                                     
+            ;-- hit0_238:                                                                                                                                                                                          
+            ;-- hit0_24:                                                                          
+
+
+Reduced disassembly
+=====================
+
+
+            0x0000516d      9082c0         mov dptr, #0x82c0           ; [0x200082c0:1]=0                                                                                                                          
+            0x00005170      eb             mov a, r3                                                                                                                                                               
+            0x00005171      1217ad         lcall 0x17ad                ;[1]                                                                                                                                        
+            0x00005174      9081b6         mov dptr, #0x81b6           //next 4: copy 0x81b6 to 0x8318 <-- 0x81b6 current counter??, 0x8318 key in part ??
+            0x00005177      e0             movx a, @dptr                                                                                                                                                           
+            0x00005178      908318         mov dptr, #0x8318           
+            0x0000517b      f0             movx @dptr, a                                                                                                                                                           
+            0x0000517c      9081b7         mov dptr, #0x81b7           //next 4: copy 0x81b7 to 0x8319
+            0x0000517f      e0             movx a, @dptr                                                                                                                                                           
+            0x00005180      908319         mov dptr, #0x8319                                                                                                             
+            0x00005183      f0             movx @dptr, a                                                                                                                                                           
+            0x00005184      9081b8         mov dptr, #0x81b8           //next 4: copy 0x81b8 to 0x831a
+            0x00005187      e0             movx a, @dptr               
+            0x00005188      90831a         mov dptr, #0x831a           
+            0x0000518b      f0             movx @dptr, a               
+            0x0000518c      9081b9         mov dptr, #0x81b9           //next 4: copy 0x81b9 to 0x831b
+            0x0000518f      e0             movx a, @dptr               
+            0x00005190      90831b         mov dptr, #0x831b           
+            0x00005193      f0             movx @dptr, a               
+            0x00005194      75e810         mov 0xe8, #0x10             //AESCS: #0x10 to AES command status register --> enable ECB (page 8.2)
+            0x00005197      e4             clr a                       
+function set key address ?
+//note: reg a is 0x00 at this point
+            0x00005198  ~   f5f5           mov 0xf5, a                 //AESIA1: set pointer for AESKIN + AESIV buffer to 0 (a7..4 = KEY addr, a3..0 AESIV address)
+            0x00005199  ~   f5f5           mov 0xf5, a                 //AESIA1: set pointer for AESKIN + AESIV buffer to 0 (a7..4 = KEY addr, a3..0 AESIV address)
+            0x0000519a      f5f6           mov 0xf6, a                 //AESIA2: set pointer for AESD buffer to 0 (a3..0 iadata)
+            0x0000519c      7f10           mov r7, #0x10               //next 5 lines: for i=9; i>0; i-- { } (loop till 0x51c5)
+        .-> 0x0000519e      ef             mov a, r7                   //newxt 3 line: if i <= 0 jmp 0x51c5 (end of loop)
+        :   0x0000519f      d3             setb c                      //enable carry bit
+        :   0x000051a0      9400           subb a, #0x00               //subtracts carry (a -= 1)
+       ,==< 0x000051a2      4021           jc 0x51c5                   //Jump if carry (if a was 0x00 before last op)
+       |:   0x000051a4      1f             dec r7                      //i--
+       |:   0x000051a5      9082c0         mov dptr, #0x82c0           // var1 *void = 0x82c0
+       |:   0x000051a8      121502         lcall 0x1502                function load next 3 data bytes to r3,r2 and a (0x82c0, 0x82c1, 0x82c3); dptr is now 0x82c2
+       |:   0x000051ab      f9             mov r1, a                   // r1 = var1[2]
+       |:   0x000051ac      8f82           mov dpl, r7                 ; var2 *void = 0x0000 + i
+       |:   0x000051ae      758300         mov dph, #0x00              ; [0x10000183:1]=0                                                                                                                          
+       |:   0x000051b1      12009e         lcall 0x009e                //fnc.009e(r3 = var1[0], dpl=i, r1 = var1[2], dph = #0x00, r2 = var1[1])  see below
+       |:   0x000051b4      f5f1           mov 0xf1, a                 //AESKIN: Mov accumulator to AES key in register (0xf1) <-- whatever is in A, it gets set as key byte
+       |:   0x000051b6      7411           mov a, #0x11                
+       |:   0x000051b8      2f             add a, r7                                                                                                                                                               
+       |:   0x000051b9      f582           mov dpl, a                  ; [0x10000182:1]=0                                                                                                                          
+       |:   0x000051bb      e4             clr a                                                                                                                                                                   
+       |:   0x000051bc      3483           addc a, #0x83                                                                                                                                                           
+       |:   0x000051be      f583           mov dph, a                  ; [0x10000183:1]=0                                                                                                                          
+       |:   0x000051c0      e0             movx a, @dptr                                                                                                                                                           
+       |:   0x000051c1      f5f3           mov 0xf3, a                 //AESD: write PLAINTEXT byte from accumulator to AES data in register (0xf3)
+       |`=< 0x000051c3      80d9           sjmp 0x519e                 //Realtive jump back to head of for loop
+       `--> 0x000051c5      d2e8           setb 0xe8.0                 //AESCS: set 0xe8 (AES command status) bit 0 to 1 --> start AES operation (ECB, encryption)
+        `-> 0x000051c7      20e8fd         jb 0xe8.0, 0x51c7           while 0xe8 (AES command status) bit 0 not set (wait for AES operation to finish) <--------------- AES finished
+//AES ECB encryption is finished at this point
+            0x000051ca      5107           acall 0x5207                funtion move 4 bytes from "AES data in/out" to r7 (pop to nowhere)
+            0x000051cc      5107           acall 0x5207                funtion move 4 bytes from "AES data in/out" to r7 (likely USB report out)                                                                 
+//At this point the last 8 bytes of the computed cipher have been thrown away and the first 8 bytes are remaining in AESD register
+
+
+//AESD register (0xf3) is like LIFO, following code reads AES result 7,6,5,4,3,2,1,0 and xors's them with 0x81b5,0x81b4..0x81ae
+            0x000051ce      9081b5         mov dptr, #0x81b5           Set data pointer to 0x81b5                                                                                                              
+            0x000051d1      e0             movx a, @dptr               Move data of external RAM 0x81b5 to accumulator
+            0x000051d2      65f3           xrl a, 0xf3                 XOR the value with data @0xf3 (AES data in/out, likely out)
+            0x000051d4      f0             movx @dptr, a               Write the result back to addr 0x81b5 (external RAM)
+            0x000051d5      9081b4         mov dptr, #0x81b4           Like above with 0x81b4
+            0x000051d8      e0             movx a, @dptr               
+            0x000051d9      65f3           xrl a, 0xf3                 
+            0x000051db      f0             movx @dptr, a               
+            0x000051dc      9081b3         mov dptr, #0x81b3           Like above with 0x81b3
+            0x000051df      e0             movx a, @dptr               
+            0x000051e0      65f3           xrl a, 0xf3                 
+            0x000051e2      f0             movx @dptr, a               
+            0x000051e3      9081b2         mov dptr, #0x81b2           
+            0x000051e6      e0             movx a, @dptr               
+            0x000051e7      65f3           xrl a, 0xf3                 
+            0x000051e9      f0             movx @dptr, a               
+            0x000051ea      9081b1         mov dptr, #0x81b1           
+            0x000051ed      e0             movx a, @dptr               
+            0x000051ee      65f3           xrl a, 0xf3                 
+            0x000051f0      f0             movx @dptr, a               
+            0x000051f1      9081b0         mov dptr, #0x81b0           
+            0x000051f4      e0             movx a, @dptr               
+            0x000051f5      65f3           xrl a, 0xf3                 
+            0x000051f7      f0             movx @dptr, a               
+            0x000051f8      9081af         mov dptr, #0x81af           
+            0x000051fb      e0             movx a, @dptr               
+            0x000051fc      65f3           xrl a, 0xf3                 
+            0x000051fe      f0             movx @dptr, a               
+            0x000051ff      9081ae         mov dptr, #0x81ae           --> 0x81ae .. 0x81b5: 8 byte encrypted report payload 
+            0x00005202      e0             movx a, @dptr               
+            0x00005203      65f3           xrl a, 0xf3                 
+            0x00005205      f0             movx @dptr, a               
+            0x00005206      22             ret                      
+
+funtion move for bytes from "AES data in/out" to r7 (throw them away)
+       ::   0x00005207      aff3           mov r7, 0xf3                ; [0x100001f3:1]=0                                                                                                                          
+       ::   0x00005209      aff3           mov r7, 0xf3                ; [0x100001f3:1]=0                                                                                                                          
+       ::   0x0000520b      aff3           mov r7, 0xf3                ; [0x100001f3:1]=0                                                                                                                          
+       ::   0x0000520d      aff3           mov r7, 0xf3                ; [0x100001f3:1]=0                                                                                                                          
+       ::   0x0000520f      22             ret                                                             
+
+
+function load next 3 data bytes to r3,r2 and a
+        :   0x00001502      e0             movx a, @dptr               r3 = *dptr
+        :   0x00001503      fb             mov r3, a                   
+        :   0x00001504      a3             inc dptr                    dptr++
+        :   0x00001505      e0             movx a, @dptr               r2 = *dptr
+        :   0x00001506      fa             mov r2, a                   
+        :   0x00001507      a3             inc dptr                    dptr++
+        :   0x00001508      e0             movx a, @dptr               a = *dptr
+        :   0x00001509      22             ret                         
+
+
+
+//var1 *void = 0x82c0
+func fnc.009e(r3 = var1[0], dpl=i, r1 = var1[2], dph = #0x00, r2 = var1[1]) {
+	if r3 != 0x01 {
+		//goto 00ad
+
+		if (carry no set) {
+			//0xb5
+			if (r3 != 0xfe) {
+				//goto 0x00be
+				a = dpl
+				a += r1
+				dpl = a
+
+				a = dph
+				a += r2 (with carry)
+				dph = a
+				a = 0
+
+				a = @a + dptr	
+			}
+
+			a = r1
+			a += dpl
+			r0 = a
+			a = @r0
+
+		}
+
+		a = r1
+		a += dpl
+		r0 = a
+		a = @r0
+		// a=&(r1 + dpl)
+	}
+
+	// dpl = dpl + var1[2]
+	a = dpl 
+	a += r1
+	dpl = a
+        
+	// dph = dph + var1[1]
+	a = dph
+	a += r2 (with carry)
+	dph = a
+
+	a = @dptr  
+
+
+}
+
+
+
+Patching (0x51ce)
+-------------
+
+Unmodified
+            0x000051ce      9081b5         mov dptr, #0x81b5           ; [0x200081b5:1]=0                                                                                                                          
+            0x000051d1      e0             movx a, @dptr                                                                                                                                                           
+            0x000051d2      65f3           xrl a, 0xf3                 ; [0x100001f3:1]=0                                                                                                                          
+            0x000051d4      f0             movx @dptr, a                                                                                                                                                           
+            0x000051d5      9081b4         mov dptr, #0x81b4           ; [0x200081b4:1]=0                                                                                                                          
+            0x000051d8      e0             movx a, @dptr                                                                                                                                                           
+            0x000051d9      65f3           xrl a, 0xf3                 ; [0x100001f3:1]=0                                                                                                                          
+            0x000051db      f0             movx @dptr, a                                                                                                                                                           
+            0x000051dc      9081b3         mov dptr, #0x81b3           ; [0x200081b3:1]=0                                                                                                                          
+            0x000051df      e0             movx a, @dptr                                                                                                                                                           
+            0x000051e0      65f3           xrl a, 0xf3                 ; [0x100001f3:1]=0                                                                                                                          
+            0x000051e2      f0             movx @dptr, a                                                                                                                                                           
+            0x000051e3      9081b2         mov dptr, #0x81b2           ; [0x200081b2:1]=0                                                                                                                          
+            0x000051e6      e0             movx a, @dptr                                                                                                                                                           
+            0x000051e7      65f3           xrl a, 0xf3                 ; [0x100001f3:1]=0                                                                                                                          
+            0x000051e9      f0             movx @dptr, a                                                                                                                                                           
+            0x000051ea      9081b1         mov dptr, #0x81b1           ; [0x200081b1:1]=0                                                                                                                          
+            0x000051ed      e0             movx a, @dptr                                                                                                                                                           
+            0x000051ee      65f3           xrl a, 0xf3                 ; [0x100001f3:1]=0                                                                                                                          
+            0x000051f0      f0             movx @dptr, a                                                                                                                                                           
+            0x000051f1      9081b0         mov dptr, #0x81b0           ; [0x200081b0:1]=0                                                                                                                          
+            0x000051f4      e0             movx a, @dptr                                                                                                                                                           
+            0x000051f5      65f3           xrl a, 0xf3                 ; [0x100001f3:1]=0                                                                                                                          
+            0x000051f7      f0             movx @dptr, a                                                                                                                                                           
+            0x000051f8      9081af         mov dptr, #0x81af           ; [0x200081af:1]=0                                                                                                                          
+            0x000051fb      e0             movx a, @dptr                                                                                                                                                           
+            0x000051fc      65f3           xrl a, 0xf3                 ; [0x100001f3:1]=0                                                                                                                          
+            0x000051fe      f0             movx @dptr, a                                                                                                                                                           
+            0x000051ff      9081ae         mov dptr, #0x81ae           ; [0x200081ae:1]=0                                                                                                                          
+            0x00005202      e0             movx a, @dptr                                                                                                                                                           
+            0x00005203      65f3           xrl a, 0xf3                 ; [0x100001f3:1]=0                                                                                                                          
+            0x00005205      f0             movx @dptr, a                                  
+
+We want 0x82c0..0x82c7 in the out report
+
+9082c0	mov dptr, #0x82c0
+e0	movx a,@dptr
+9081ae	mov dptr, #0x81ae
+f0      movx @dptr,a
+
+... and so on ... this consumes 1 more byte per copy
+
+We want to substitute
+old: 9081b5 e065f3f0 9081b4 e065f3f0 9081b3 e065f3f0 9081b2 e065f3f0 9081b1 e065f3f0 9081b0 e065f3f0 9081af e065f3f0 9081ae e065f3f0
+new: 9082c0 e0 9081ae f0 9082c1 e0 9081af f0 9082c2 e0 9081b0 f0 9082c3 e0 9081b1 f0 9082c4 e0 9081b2 f0 9082c5 e0 9081b3 f0 9082c6 e0 9081b4 f0 9082c7 e0 9081b5 f0 
+
+9081b5e065f3f09081b4e065f3f09081b3e065f3f09081b2e065f3f09081b1e065f3f09081b0e065f3f09081afe065f3f09081aee065f3f0
+9082c0e09081aef09082c1e09081aff09082c2e09081b0f09082c3e09081b1f09082c4e09081b2f09082c5e09081b3f09082c6e09081b4f0 //82c0 to 82c6
+
+@5450 headroom for patches
+9082c0e09081aef09082c1e09081aff09082c2e09081b0f09082c3e09081b1f09082c4e09081b2f09082c5e09081b3f09082c6e09081b4f09082c7e09081b5f0
+9081b5e065f3f09081b4e065f3f09081b3e065f3f09081b2e065f3f09081b1e065f3f09081b0e065f3f09081afe065f3f09081aee065f3f0
+22
+
+@51ce
+
+
+
+Instructions:
+s 0x5450
+# wx 9082c0e09081aef09082c1e09081aff09082c2e09081b0f09082c3e09081b1f09082c4e09081b2f09082c5e09081b3f09082c6e09081b4f09082c7e09081b5f0
+wx 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+
+s 0x5490
+wx 9081b5e065f3f09081b4e065f3f09081b3e065f3f09081b2e065f3f09081b1e065f3f09081b0e065f3f09081afe065f3f09081aee065f3f022
+# lcall 0x5450
+s 0x51ce
+wx 1254500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+
+
+Dongle data
+-------------
+
+27664 (0x6c10): 021201001988020400000000000000000377829A0702061300000000000000007C111130E220012C1100000000000000
+
+02 			0x6c10 ??
+12010019 		0x6c11 major.minor.bcd
+8802			0x6c15 WPID dongle ??
+04000000000000000003
+77829A07		SN dongle
+0206			CAPS ??? (seen in pairing)
+13 00 00 00  00 00 00 00 00
+
+7C 11 11 30 E2 20 01 2C 11 00 00 00 00 00 00 00
+
+
+
+
+

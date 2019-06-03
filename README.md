@@ -1,6 +1,6 @@
 # Unifying disclosure repo
 
-This repo will be used to discusse recent vulnerabilities in Logitech
+This repo will be used to discuss recent vulnerabilities in Logitech
 Unifying technology, as well to share and discuss related 
 proof-of-concept code.
 
@@ -12,7 +12,7 @@ everything**.
 As Logitech already agreed that I'm allowed to disclose most parts, I'll
 add in material as soon as I cleaned it up. This includes:
 
-## Repo content
+## (planned) Repo content
 
 - mjackit (Go code to interact with Logitech Unifying dongles/devices from RF end and carry out PoC1, PoC2 and
 run the demoed covert channel)
@@ -22,17 +22,15 @@ Logitech has a patch ready)
 to ask questions)
 - the reports provided to Logitech
 - Client agent code for remote shell relayed through Unifying receiver
+- various documents (mostly raw notes) created during research 
 
-## Not in Repo
+## Not in repo
 
 - recent work on LOGITacker (brings most of this to a nRF52840 dongle, acting as stand-alone device)
+- raw SDR captures
+- modified firmwares / project files from firmware analysis
 
 ## The new vulns
-
-### 1) PoC1 - Sniff pairing and recreate AES keys for a Unifying device, in order to live decrypt keyboard RF traffic
-
-- PoC video: https://youtu.be/1UEc8K_vwJo
-- Demo shown in the video is part of `mjackit`, which will be added to this repo
 
 ### 1) PoC1 - Sniff pairing and recreate AES keys for a Unifying device, in order to live decrypt keyboard RF traffic
 
@@ -41,6 +39,7 @@ to ask questions)
 - Applies to all Unifying dongles and latest keyboard devices (and some others)
 - will not be patched, because of limitations of available Logitech hardware and backwards compatibility requirement
 of Unifying technology
+- covered in "vulnerability report 1"
 
 ### 2) PoC2 - Keystroke injection for encrypted devices, without knowledge of keys + bypass of counter reuse mitigation 
 
@@ -53,7 +52,7 @@ protection (even if patches for counter re-use vulnerability, reported by Bastil
 of Unifying technology
 - there exists a theoretical attack, which doesn't require physical access to a device - my attempts to implement a
 proper PoC have failed (works too slow, leads to unpredictable and unintended input on target, reference: https://twitter.com/mame82/status/1117248244478894080)
-
+- covered in "vulnerability report 2"
 
 ### 3) PoC3 - AES key extraction from Unifying dongles with one-time physical access 
 
@@ -61,7 +60,7 @@ proper PoC have failed (works too slow, leads to unpredictable and unintended in
 - Demo shown in the video is part of `munifying`, which will be added to this repo as soon as the respective Logitech 
 patch is issued
 - once keys are extracted `mjackit` could be used to eavesdrop all devices or inject keystrokes
-
+- covered in "vulnerability report 3"
 
 ### Remote shell
 
