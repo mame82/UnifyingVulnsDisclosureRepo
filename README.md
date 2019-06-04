@@ -46,7 +46,7 @@ to ask questions)
 - Applies to all Unifying dongles and latest keyboard devices (and some others)
 - will not be patched, because of limitations of available Logitech hardware and backwards compatibility requirement
 of Unifying technology
-- covered in "vulnerability report 1"
+- covered in ["vulnerability report 1"](https://github.com/mame82/UnifyingVulnsDisclosureRepo/raw/master/vulnerability_reports/report1_git.pdf)
 
 ### 2) PoC2 - Keystroke injection for encrypted devices, without knowledge of keys + bypass of counter reuse mitigation 
 
@@ -59,7 +59,7 @@ protection (even if patches for counter re-use vulnerability, reported by Bastil
 of Unifying technology
 - there exists a theoretical attack, which doesn't require physical access to a device - my attempts to implement a
 proper PoC have failed (works too slow, leads to unpredictable and unintended input on target, reference: https://twitter.com/mame82/status/1117248244478894080)
-- covered in "vulnerability report 2"
+- covered in ["vulnerability report 2"](https://github.com/mame82/UnifyingVulnsDisclosureRepo/raw/master/vulnerability_reports/report2_git.pdf)
 
 ### 3) PoC3 - AES key extraction from Unifying dongles with one-time physical access 
 
@@ -67,7 +67,7 @@ proper PoC have failed (works too slow, leads to unpredictable and unintended in
 - Demo shown in the video is part of `munifying`, which will be added to this repo as soon as the respective Logitech 
 patch is issued
 - once keys are extracted `mjackit` could be used to eavesdrop all devices or inject keystrokes
-- covered in "vulnerability report 3"
+- covered in "vulnerability report 3" (will be added, as soon as the Logitech patch is available)
 
 ### Remote shell
 
