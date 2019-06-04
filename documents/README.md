@@ -2,6 +2,13 @@
 
 Contains unsorted notes created during research. Before diving into this, I suggest reading the reports.
 
+## early_summary.md
+
+Extensive summary of an early research stage (before discovery of the vulnerabilities and implementation
+of the covert channel). Although this summary is outdated/incomplete, it is worth reading - it covers some very
+basic topics of Unfying protocol (RF and USB layers).
+The document was used in an exchange with otheer researchers interested in this topic, before the respective
+github repos wen private. Because of this, the links to this repos are dead.
 
 ## covert_channel_proto.md
 
@@ -210,6 +217,10 @@ written to the USB "DJ" HID interface of a Unifying dongle allow to send arbitra
 (LED reports in the example). The covert channel for the remote shell utilizes HID++ reports, instead of DJ 
 reports, though.
 
+## unifying_pairing_usb_analysis.md
+
+Analysis of USB traffic (HID++ 1.0 commands and notifications) during device pairing.
+Setting a dongle into pairing mode and un-pairing of existing devices is re-implemented in `munifying` 
 
 ## xxxxxxx_memread.txt 
 
