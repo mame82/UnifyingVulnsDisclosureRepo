@@ -1,3 +1,9 @@
+**For questions / discussion please utilize github issues, for direct communication
+use my email address**
+
+*I try to keep this transparent, by offering repo access to Logitech staff. Respective emails
+are unfortunately unanswered, so far.*
+
 # Unifying disclosure repo
 
 This repo will be used to discuss recent vulnerabilities in Logitech
@@ -12,8 +18,7 @@ everything**.
 As Logitech already agreed that I'm allowed to disclose most parts, I'll
 add in material as soon as I cleaned it up. This includes:
 
-**For questions / discussion please utilize github issues, for direct communication
-use my email address**
+
 
 ## (planned) Repo content
 
@@ -25,7 +30,6 @@ Logitech has a patch ready)
 to ask questions)
 - the reports provided to Logitech
 - Client agent code for remote shell relayed through Unifying receiver
-- various documents (mostly raw notes) created during research 
 
 ## Not in repo
 
