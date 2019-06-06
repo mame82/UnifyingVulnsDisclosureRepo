@@ -33,7 +33,7 @@ to ask questions)
 
 ## Not in repo
 
-- recent work on LOGITacker (brings most of this to a nRF52840 dongle, acting as stand-alone device)
+- recent work on LOGITacker (brings most of this to a nRF52840 dongle, acting as stand-alone device, exception see issue #2)
 - raw SDR captures
 - modified firmwares / project files from firmware analysis
 
@@ -42,7 +42,7 @@ to ask questions)
 ### 1) PoC1 - Sniff pairing and recreate AES keys for a Unifying device, in order to live decrypt keyboard RF traffic
 
 - PoC video: https://youtu.be/1UEc8K_vwJo
-- Demo shown in the video is part of `mjackit`, which will be added to this repo
+- Demo shown in the video is part of `mjackit` (in `tools` folder of this repo)
 - Applies to all Unifying dongles and latest keyboard devices (and some others)
 - will not be patched, because of limitations of available Logitech hardware and backwards compatibility requirement
 of Unifying technology
@@ -51,7 +51,7 @@ of Unifying technology
 ### 2) PoC2 - Keystroke injection for encrypted devices, without knowledge of keys + bypass of counter reuse mitigation 
 
 - PoC video: https://youtu.be/EksyCO0DzYs
-- Demo shown in the video is part of `mjackit`, which will be added to this repo
+- Demo shown in the video is part of `mjackit` (in `tools` folder of this repo)
 - Applies to all Unifying dongles and latest keyboard devices
 - Exploits a combination of known plaintext (requires one time physical access to device) and improper counter re-use 
 protection (even if patches for counter re-use vulnerability, reported by Bastille are applied)
@@ -73,7 +73,7 @@ patch is issued
 
 - PoC video: https://twitter.com/mame82/status/1104044796761595904 (high res: https://youtu.be/OBqvcAbMkRk)
 - not considered as vulnerabilities - utilizes features of Unifying, not bugs
-- server side is part of `mjackit`
+- server side is part of `mjackit` (in `tools` folder of this repo)
 - deployment of client side payload, utilizing PoC2 is part of `mjackit` (toy demo, typing out the payload 
 takes about 2 minutes, if a single character goes wrong - everything fails ... inteded way for client agent deployment 
 is a down&exec stage) - PoC video of toy version: https://twitter.com/mame82/status/1128392333165256706

@@ -16,9 +16,10 @@ This means:
 
 - demos for all RF based Unifying vulnerabilities are included
     - PoC 1: Sniff pairing of a device, derive keys and decrypt successive traffic from this device)
-    - PoC 2: 
-    - force pairing
-    - covert channel shell
+    - PoC 2: Keystroke injection for encrypted devices, without knowledge of keys + bypass of counter reuse mitigation
+    - forced pairing
+    - covert channel remote shell through Unifying receiver (server code + payload delivery)
+    - pair flooding
 - mjackit supports multiple keyboard layouts for injection (`SniffReplayXORPress` and `SniffReplayXORType`
 accept layout as last parameter)
 - the code contains many not deleted experiments and isn't well structured (I removed a ton of this
