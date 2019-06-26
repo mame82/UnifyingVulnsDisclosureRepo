@@ -1,8 +1,20 @@
+
 **For questions / discussion please utilize github issues, for direct communication
 use my email address**
 
 *I try to keep this transparent, by offering repo access to Logitech staff. Respective emails
 are unfortunately unanswered, so far.*
+
+# Updates
+
+## June 26, 2019
+- pushed statements from Logitech concerning the talk on the topic into talk subfolder
+(including my counter statements, document is German)
+- invitation for closed LOGITacker testing group sent (currently covers PoC 1 and other stuff, like forced
+pairing etc.)
+
+## June 25, 2019
+- handling of all vulnerabilities in scope of this repository has been handed-over to German CERT-Bund
 
 # Unifying disclosure repo
 
