@@ -7,6 +7,11 @@ are unfortunately unanswered, so far.*
 
 # Updates
 
+## June 28, 2019
+- encrypted Logitech presenters affected by PoC 3 (key extraction from dongle - not disclosed, yet)
+- Logitech R500: https://twitter.com/mame82/status/1143093313924452353
+- Logitech SPOTLIGHT: https://youtu.be/BIs2gApDoDk
+
 ## June 26, 2019
 - pushed statements from Logitech concerning the talk on the topic into talk subfolder
 (including my counter statements, document is German)
