@@ -7,6 +7,9 @@ are unfortunately unanswered, so far.*
 
 # Updates
 
+## July 8, 2019
+- press release Heise: https://www.heise.de/ct/artikel/Logitech-keyboards-and-mice-vulnerable-to-extensive-cyber-attacks-4464533.html
+
 ## June 28, 2019
 - encrypted Logitech presenters affected by PoC 3 (key extraction from dongle - not disclosed, yet)
 - Logitech R500: https://twitter.com/mame82/status/1143093313924452353
