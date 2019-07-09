@@ -74,7 +74,7 @@ to ask questions)
 - Applies to all Unifying dongles and latest keyboard devices (and some others)
 - will not be patched, because of limitations of available Logitech hardware and backwards compatibility requirement
 of Unifying technology
-- covered in ["vulnerability report 1"](https://github.com/mame82/UnifyingVulnsDisclosureRepo/raw/master/vulnerability_reports/report1_git.pdf)
+- covered in ["vulnerability report 1"](https://github.com/mame82/UnifyingVulnsDisclosureRepo/blob/master/vulnerability_reports/report1_git.pdf)
 
 ### 2) PoC2 - Keystroke injection for encrypted devices, without knowledge of keys + bypass of counter reuse mitigation (CVE-2019-13053)
 
