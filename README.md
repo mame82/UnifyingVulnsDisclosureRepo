@@ -92,13 +92,20 @@ proper PoC have failed (works too slow, leads to unpredictable and unintended in
 *Note: In feedback for press releases, I was asked why this attack needs physical access, at all. In its nature, the crypto implementaion is vulnerable to known-plaintext attacks. "Plaintext" in this context means: pressed keys. A potential attacker needs about 12 known key-presses to attack inject arbitrary keystrokes without knowledge of the encryption keys (in fact, known plaintext for 24 encrypted reports is needed, but 12 out of 24 are key-releases in most cases). Of course, it doesn't matter how an potential attacker gets knowledge of the twelve pressed keys. Anyways, the Proof-of-Concept for the vulnerability was extended (as highlighted in "vulnerability report 2"), in order to showcase that the communication protocol could leak additional information via RF, ultimately leading to known plaintext. This happens, if the user presses a key which toggles a keyboard LED (CAPS, SCROLL, NUM) and ultimately an unencrypted LED report is sent over RF. An automated attack could be deployed on top of this, which could derive plaintext of twelve successive presses to LED togelling keys. As it is unlikely that a normal user presses such a key 12-times in a sequence (which must not be interrupted by non-LED-togelling keys, in order to get a continuous counter seqeunce), Report 2 and the respective Proof-of-Concepts state that an attacker needs physical access to press the "magic key sequence" once. This does not apply if the keys could be obtained in another fashion (f.e. watching a presentaion, where an affected clicker is used). In addition there exists a theoretical bruteforce approach, which allows to get known plaintext for unknown key presses (described in report 2). Approaches to implement a reliable PoC for the bruteforce failed due to different reasons (mostly because PowerDown keys where send during bruteforce attempts). If such a bruteforce succeeds (RF only, no physical access, but aggressive interaction with target host) the former unknown key-presses of the encrypted reports are known to the attacker (bruteforce of plaintext, without key knowledge). There are some slides in the talk hosted in this repo, which visualize the approach - a picture says more than 1000 words.*
 
 
-### 3) PoC3 - AES key extraction from Unifying dongles with one-time physical access 
+### 3) PoC3 - AES key extraction from Unifying dongles with one-time physical access (CVE-2019-13055)
 
 - PoC video: https://twitter.com/mame82/status/1101635558701436928 (high res: https://youtu.be/5z_PEZ5PyeA)
 - Demo shown in the video is part of `munifying`, which will be added to this repo as soon as the respective Logitech 
 patch is issued
 - once keys are extracted `mjackit` could be used to eavesdrop all devices or inject keystrokes
 - covered in "vulnerability report 3" (will be added, as soon as the Logitech patch is available)
+
+### CVE-2019-13054
+
+- Logitech R500: https://twitter.com/mame82/status/1143093313924452353
+- Logitech SPOTLIGHT: https://youtu.be/BIs2gApDoDk
+
+*Note: CVE-2019-13054 follows the same principles as CVE-2019-13055, but applies to presentation clickers R500 and SPOTLIGHT (instead of Unifying devices). Additionally the version for clickers includes key-filter bypasses*
 
 ### Remote shell
 
