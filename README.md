@@ -1,30 +1,8 @@
 
-**For questions / discussion please utilize github issues, for direct communication
-use my email address**
-
-*I try to keep this transparent, by offering repo access to Logitech staff. Respective emails
-are unfortunately unanswered, so far.*
-
-# Updates
-
-## July 8, 2019
-- press release Heise: https://www.heise.de/ct/artikel/Logitech-keyboards-and-mice-vulnerable-to-extensive-cyber-attacks-4464533.html
-
-## June 28, 2019
-- encrypted Logitech presenters affected by PoC 3 (key extraction from dongle - not disclosed, yet)
-- Logitech R500: https://twitter.com/mame82/status/1143093313924452353
-- Logitech SPOTLIGHT: https://youtu.be/BIs2gApDoDk
-
-## June 26, 2019
-- pushed statements from Logitech concerning the talk on the topic into talk subfolder
-(including my counter statements, document is German)
-- invitation for closed LOGITacker testing group sent (currently covers PoC 1 and other stuff, like forced
-pairing etc.)
-
-## June 25, 2019
-- handling of all vulnerabilities in scope of this repository has been handed-over to German CERT-Bund
-
 # Unifying disclosure repo
+
+*This repository was accessible to a restricted amount of reviewers (including Logitech staff)
+before opened to public. The content is mostly left untouched. Most subfolders contain a dedicated README file*
 
 This repo will be used to discuss recent vulnerabilities in Logitech
 Unifying technology, as well to share and discuss related 
@@ -38,6 +16,36 @@ everything**.
 As Logitech already agreed that I'm allowed to disclose most parts, I'll
 add in material as soon as I cleaned it up. This includes:
 
+
+**For questions / discussion please utilize github issues, for direct communication
+use my email address**
+
+*I try to keep this transparent, by offering repo access to Logitech staff. Respective emails
+are unfortunately unanswered, so far.*
+
+
+## Updates
+
+### July 9, 2019
+- press "ZDNet": https://www.zdnet.com/article/logitech-wireless-usb-dongles-vulnerable-to-new-hijacking-flaws/
+- new vulnerability: Hidden pairing mode of presentation clickers allows key extraction via RF sniffnig (CVE-2019-13052, will not be patched), instead of dumping from dongle (CVE-2019-13054, affects only dongles based on Texas Instruments chip, will be patched): https://twitter.com/mame82/status/1148600800685502469
+
+### July 8, 2019
+- press "Heise": https://www.heise.de/ct/artikel/Logitech-keyboards-and-mice-vulnerable-to-extensive-cyber-attacks-4464533.html
+
+### June 28, 2019
+- encrypted Logitech presenters affected by PoC 3 (key extraction from dongle - not disclosed, yet)
+- Logitech R500: https://twitter.com/mame82/status/1143093313924452353
+- Logitech SPOTLIGHT: https://youtu.be/BIs2gApDoDk
+
+### June 26, 2019
+- pushed statements from Logitech concerning the talk on the topic into talk subfolder
+(including my counter statements, document is German)
+- invitation for closed LOGITacker testing group sent (currently covers PoC 1 and other stuff, like forced
+pairing etc.)
+
+### June 25, 2019
+- handling of all vulnerabilities in scope of this repository has been handed-over to German CERT-Bund
 
 
 ## (planned) Repo content
@@ -59,7 +67,7 @@ to ask questions)
 
 ## The new vulns
 
-### 1) PoC1 - Sniff pairing and recreate AES keys for a Unifying device, in order to live decrypt keyboard RF traffic
+### 1) PoC1 - Sniff pairing and recreate AES keys for a Unifying device, in order to live decrypt keyboard RF traffic (CVE-2019-13052)
 
 - PoC video: https://youtu.be/1UEc8K_vwJo
 - Demo shown in the video is part of `mjackit` (in `tools` folder of this repo)
@@ -68,7 +76,7 @@ to ask questions)
 of Unifying technology
 - covered in ["vulnerability report 1"](https://github.com/mame82/UnifyingVulnsDisclosureRepo/raw/master/vulnerability_reports/report1_git.pdf)
 
-### 2) PoC2 - Keystroke injection for encrypted devices, without knowledge of keys + bypass of counter reuse mitigation 
+### 2) PoC2 - Keystroke injection for encrypted devices, without knowledge of keys + bypass of counter reuse mitigation (CVE-2019-13053)
 
 - PoC video: https://youtu.be/EksyCO0DzYs
 - Demo shown in the video is part of `mjackit` (in `tools` folder of this repo)
@@ -80,6 +88,9 @@ of Unifying technology
 - there exists a theoretical attack, which doesn't require physical access to a device - my attempts to implement a
 proper PoC have failed (works too slow, leads to unpredictable and unintended input on target, reference: https://twitter.com/mame82/status/1117248244478894080)
 - covered in ["vulnerability report 2"](https://github.com/mame82/UnifyingVulnsDisclosureRepo/raw/master/vulnerability_reports/report2_git.pdf)
+
+*Note: In feedback for press releases, I was asked why this attack needs physical access, at all. In its nature, the crypto implementaion is vulnerable to known-plaintext attacks. "Plaintext" in this context means: pressed keys. A potential attacker needs about 12 known key-presses to attack inject arbitrary keystrokes without knowledge of the encryption keys (in fact, known plaintext for 24 encrypted reports is needed, but 12 out of 24 are key-releases in most cases). Of course, it doesn't matter how an potential attacker gets knowledge of the twelve pressed keys. Anyways, the Proof-of-Concept for the vulnerability was extended (as highlighted in "vulnerability report 2"), in order to showcase that the communication protocol could leak additional information via RF, ultimately leading to known plaintext. This happens, if the user presses a key which toggles a keyboard LED (CAPS, SCROLL, NUM) and ultimately an unencrypted LED report is sent over RF. An automated attack could be deployed on top of this, which could derive plaintext of twelve successive presses to LED togelling keys. As it is unlikely that a normal user presses such a key 12-times in a sequence (which must not be interrupted by non-LED-togelling keys, in order to get a continuous counter seqeunce), Report 2 and the respective Proof-of-Concepts state that an attacker needs physical access to press the "magic key sequence" once. This does not apply if the keys could be obtained in another fashion (f.e. watching a presentaion, where an affected clicker is used). In addition there exists a theoretical bruteforce approach, which allows to get known plaintext for unknown key presses (described in report 2). Approaches to implement a reliable PoC for the bruteforce failed due to different reasons (mostly because PowerDown keys where send during bruteforce attempts). If such a bruteforce succeeds (RF only, no physical access, but aggressive interaction with target host) the former unknown key-presses of the encrypted reports are known to the attacker (bruteforce of plaintext, without key knowledge). There are some slides in the talk hosted in this repo, which visualize the approach - a picture says more than 1000 words.*
+
 
 ### 3) PoC3 - AES key extraction from Unifying dongles with one-time physical access 
 
