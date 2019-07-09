@@ -116,7 +116,7 @@ is a down&exec stage) - PoC video of toy version: https://twitter.com/mame82/sta
 - `mjackit` could emulate a dongle in pairing mode. This was mainly used in research phase, but could possibly be
 used to pair non-Unifying Logitech devices to Unifying dongles (mentioned in one of the reports)
 
-## Twitter invitation message for this repo (for those who missed it)
+## ORIGINAL CONTENT DIRECTED TO EARLY REVIEWERS: Twitter invitation message for this repo (for those who missed it)
 
 ```
 Hi folks,
