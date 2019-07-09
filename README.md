@@ -42,7 +42,7 @@ are unfortunately unanswered, so far.*
 - pushed statements from Logitech concerning the talk on the topic into talk subfolder
 (including my counter statements, document is German)
 - invitation for closed LOGITacker testing group sent (currently covers PoC 1 and other stuff, like forced
-pairing etc.)
+pairing etc.) - **LOGITacker will be release on July 11, 2019**
 
 ### June 25, 2019
 - handling of all vulnerabilities in scope of this repository has been handed-over to German CERT-Bund
