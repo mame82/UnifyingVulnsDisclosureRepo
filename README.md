@@ -1,8 +1,8 @@
 
 # Unifying disclosure repo
 
-*This repository was accessible to a restricted amount of reviewers (including Logitech staff)
-before opened to public. The content is mostly left untouched. Most subfolders contain a dedicated README file*
+*This repository was accessed by a restricted group of reviewers before beeing opened to public (including Logitech staff).
+The content is mostly left untouched. Most subfolders contain a dedicated README file*
 
 This repo will be used to discuss recent vulnerabilities in Logitech
 Unifying technology, as well to share and discuss related 
