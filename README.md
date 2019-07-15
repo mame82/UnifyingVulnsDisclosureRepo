@@ -26,6 +26,9 @@ are unfortunately unanswered, so far.*
 
 ## Updates
 
+### July 11, 2019
+- LOGITacker released: https://github.com/mame82/LOGITacker
+
 ### July 9, 2019
 - press "ZDNet": https://www.zdnet.com/article/logitech-wireless-usb-dongles-vulnerable-to-new-hijacking-flaws/
 - new vulnerability: Hidden pairing mode of presentation clickers allows key extraction via RF sniffnig (CVE-2019-13052, will not be patched), instead of dumping from dongle (CVE-2019-13054, affects only dongles based on Texas Instruments chip, will be patched): https://twitter.com/mame82/status/1148600800685502469
