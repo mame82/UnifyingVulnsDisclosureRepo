@@ -26,6 +26,9 @@ are unfortunately unanswered, so far.*
 
 ## Updates
 
+### July 15, 2019
+- Summary added: https://github.com/mame82/UnifyingVulnsDisclosureRepo/blob/master/logitech_vuln_summary.md
+
 ### July 11, 2019
 - LOGITacker released: https://github.com/mame82/LOGITacker
 
