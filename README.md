@@ -16,13 +16,21 @@ everything**.
 As Logitech already agreed that I'm allowed to disclose most parts, I'll
 add in material as soon as I cleaned it up. This includes:
 
+## content
 
-**For questions / discussion please utilize github issues, for direct communication
-use my email address**
+- mjackit (Go code to interact with Logitech Unifying dongles/devices from RF end and carry out PoC1, PoC2 and
+run the demoed covert channel)
+- munifying (Go code to interact with Unifying dongle on USB end, able to carry out PoC3, will be added as soon as 
+Logitech has a patch ready)
+- raw documents created during info gathering/analysis phase (without further comments, partially outdated, feel free 
+to ask questions)
+- the reports provided to Logitech
+- Client agent code for remote shell relayed through Unifying receiver
 
-*I try to keep this transparent, by offering repo access to Logitech staff. Respective emails
-are unfortunately unanswered, so far.*
+## not in repository
 
+- raw SDR captures
+- modified firmwares / project files from firmware analysis
 
 ## Updates
 
@@ -33,6 +41,8 @@ are unfortunately unanswered, so far.*
 - LOGITacker released: https://github.com/mame82/LOGITacker
 
 ### July 9, 2019
+- added tool `munifying` pre-release (puts Unifying receviers and receivers for presentation clickers into pairing mode,
+functionality to dump AES keys directly via CVE-2019-13054 / 13055 disabled in pre-release)
 - press "ZDNet": https://www.zdnet.com/article/logitech-wireless-usb-dongles-vulnerable-to-new-hijacking-flaws/
 - new vulnerability: Hidden pairing mode of presentation clickers allows key extraction via RF sniffnig (CVE-2019-13052, will not be patched), instead of dumping from dongle (CVE-2019-13054, affects only dongles based on Texas Instruments chip, will be patched): https://twitter.com/mame82/status/1148600800685502469
 
@@ -54,22 +64,6 @@ pairing etc.) - **LOGITacker will be release on July 11, 2019**
 - handling of all vulnerabilities in scope of this repository has been handed-over to German CERT-Bund
 
 
-## (planned) Repo content
-
-- mjackit (Go code to interact with Logitech Unifying dongles/devices from RF end and carry out PoC1, PoC2 and
-run the demoed covert channel)
-- munifying (Go code to interact with Unifying dongle on USB end, able to carry out PoC3, will be added as soon as 
-Logitech has a patch ready)
-- raw documents created during info gathering/analysis phase (without further comments, partially outdated, feel free 
-to ask questions)
-- the reports provided to Logitech
-- Client agent code for remote shell relayed through Unifying receiver
-
-## Not in repo
-
-- recent work on LOGITacker (brings most of this to a nRF52840 dongle, acting as stand-alone device, exception see issue #2)
-- raw SDR captures
-- modified firmwares / project files from firmware analysis
 
 ## The new vulns
 
