@@ -1,3 +1,11 @@
+# munifying
+
+The source code for `munifying` is here:
+
+[https://github.com/mame82/munifying](https://github.com/mame82/munifying)
+
+## outdated section
+
 I agreed with Logitech not to disclose detailed information on CVE-2019-13054 / CVE-2019-13055 (USB based AES key extraction from Logitech wireless receivers).
 
 As `munifying` source code contains relevant information, only a pre-compiled binary is linked for now.
